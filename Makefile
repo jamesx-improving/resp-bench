@@ -325,7 +325,7 @@ java-info: java-build
 PIP_FLAGS?=
 
 python-build:
-	cd python && pip install $(PIP_FLAGS) -e .
+	cd python && python -m pip install $(PIP_FLAGS) -e .
 
 python-test:
 	cd python && python -m pytest
