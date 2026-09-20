@@ -1,0 +1,20 @@
+{
+    "description": "Performance sweep - valkey-glide 2.5.3-rc1 across Java, Node.js and Python. One matrix covers all three because the runner resolves the engine per driver config.",
+    "x_axis": "connections",
+    "workload_template": "configs/workloads/reference/basic-standalone-single-client-1M-reqs.json",
+    "iterations": 3,
+    "dimensions": {
+        "connections": [
+            1,
+            4,
+            16,
+            64,
+            128
+        ],
+        "driver_config": [
+            "configs/drivers/high-throughput/valkey-glide.json",
+            "configs/drivers/high-throughput/valkey-glide-node.json",
+            "configs/drivers/high-throughput/valkey-glide-python.json"
+        ]
+    }
+}

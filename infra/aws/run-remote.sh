@@ -245,6 +245,20 @@ else
   log "WARNING: report generation failed"
 fi
 
+# (5b) Memory chart — RSS over time per series, plus a flat/rising verdict.
+#      Separate from the step above because generate_interactive_graphs.py reads
+#      only cpu_percent out of the .system.ndjson files and ignores the
+#      memory_rss_bytes the monitor already collects. Best effort: a soak whose
+#      throughput numbers are good must still upload even if this chart fails.
+log "generating memory chart"
+if python scripts/plot_memory.py "${RESULTS_DIR}" \
+     --output "${GRAPHS_DIR}/memory.html" \
+     --title "Memory usage over time — ${MATRIX_NAME} (${JOB_ID})"; then
+  log "memory chart written to ${GRAPHS_DIR}/memory.html"
+else
+  log "WARNING: memory chart generation failed"
+fi
+
 # (6) Metadata with the honest final status.
 if [ "${SWEEP_RC}" -eq 0 ]; then
   write_metadata "succeeded"

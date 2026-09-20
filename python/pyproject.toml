@@ -17,7 +17,7 @@ license = { text = "Apache-2.0" }
 # (GLIDE parses in Rust); the parser actually in use is recorded in the metrics
 # metadata.
 dependencies = [
-    "valkey-glide==2.5.2",
+    "valkey-glide==2.5.3rc1",
     "redis==8.1.0",
     "hiredis==3.4.1",
     "hdrhistogram==0.10.7",

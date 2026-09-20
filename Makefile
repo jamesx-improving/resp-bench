@@ -318,8 +318,14 @@ java-info: java-build
 # Python Engine
 # ============================================================================
 
+# PIP_FLAGS is empty by default, which is what a developer in a virtualenv wants
+# (`--user` is rejected inside a venv). Provisioned hosts install against a system
+# interpreter with no venv and no write access to its site-packages, so
+# infra/provision.sh exports PIP_FLAGS=--user for the sweep.
+PIP_FLAGS?=
+
 python-build:
-	cd python && pip install -e .
+	cd python && pip install $(PIP_FLAGS) -e .
 
 python-test:
 	cd python && python -m pytest

@@ -266,6 +266,14 @@ if [ -f "${REPO_DIR}/scripts/requirements.txt" ]; then
   log "installing scripts/requirements.txt with Python 3.11"
   python3.11 -m pip install --user -r "${REPO_DIR}/scripts/requirements.txt"
 fi
+
+# The Python *engine* installs itself via `make python-build` (`pip install -e .`).
+# There is no venv here and the system site-packages is not writable, so the
+# install has to go to the user site — same `--user` the requirements install
+# above already relies on. Exported through the env snippet so the sweep's own
+# `make python-run` sees it, not just this shell.
+env_add 'export PIP_FLAGS=--user'
+
 python --version 2>&1 | sed 's/^/[provision]   /' || true
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -325,6 +333,8 @@ if [ "${SKIP_WARM_CACHES:-0}" != "1" ]; then
   make -C "${REPO_DIR}" csharp-build || log "WARNING: C# warm-up build failed (see above)"
   log "warming Node.js deps (npm ci + tsc)"
   make -C "${REPO_DIR}" node-build || log "WARNING: Node.js warm-up build failed (see above)"
+  log "warming Python engine install (pip install -e .)"
+  make -C "${REPO_DIR}" python-build || log "WARNING: Python warm-up build failed (see above)"
 else
   log "SKIP_WARM_CACHES=1 — skipping engine cache warm-up"
 fi
