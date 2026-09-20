@@ -1,0 +1,15 @@
+{
+    "description": "14h memory-leak soak - Node.js valkey-glide 2.5.3-rc1, one cell, RSS trend checked by scripts/plot_memory.py",
+    "x_axis": "connections",
+    "workload_template": "configs/workloads/reference/soak-standalone-14h.json",
+    "iterations": 1,
+    "cpu_interval": 5,
+    "dimensions": {
+        "connections": [
+            64
+        ],
+        "driver_config": [
+            "configs/drivers/high-throughput/valkey-glide-node.json"
+        ]
+    }
+}

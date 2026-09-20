@@ -18,7 +18,7 @@
     "start": "node dist/src/cli.js"
   },
   "dependencies": {
-    "@valkey/valkey-glide": "2.5.2",
+    "@valkey/valkey-glide": "2.5.3-rc1",
     "hdr-histogram-js": "3.0.1",
     "ioredis": "5.11.1",
     "iovalkey": "0.4.0"

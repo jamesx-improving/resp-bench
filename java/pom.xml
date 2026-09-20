@@ -26,7 +26,7 @@
         <!-- Driver versions - orchestrator can update these -->
         <jedis.version>5.2.0</jedis.version>
         <lettuce.version>6.5.0.RELEASE</lettuce.version>
-        <valkey-glide.version>2.2.3</valkey-glide.version>
+        <valkey-glide.version>2.5.3-rc1</valkey-glide.version>
         <redisson.version>3.32.0</redisson.version>
         <spring-data-valkey.version>0.2.0</spring-data-valkey.version>
         <spring-data-redis.version>3.5.1</spring-data-redis.version>

@@ -1,0 +1,63 @@
+{
+    "schema_version": "1.0",
+    "benchmark_profile": {
+        "name": "Soak - Standalone, 14h STEADY state",
+        "description": "Memory-leak soak: populate 100K keys, then hold 80/20 GET/SET for 14 hours. Connection count is supplied by the matrix runner, which overwrites it on every phase. Paired with scripts/plot_memory.py to check whether process RSS is flat or rising.",
+        "version": "1.0.0"
+    },
+    "phases": [
+        {
+            "id": "WARMUP",
+            "description": "Populate the keyspace with sequential SETs so STEADY GETs hit",
+            "connections": 64,
+            "cps_limit": -1,
+            "rps_limit": -1,
+            "completion": {
+                "type": "requests",
+                "requests": 100000
+            },
+            "keyspace": {
+                "keys_count": 100000,
+                "key_size_bytes": 16,
+                "key_prefix": "soak:",
+                "generation_alg": "sequential_int"
+            },
+            "commands": [
+                {
+                    "command": "set",
+                    "weight": 1.0,
+                    "data_size_bytes": 512
+                }
+            ]
+        },
+        {
+            "id": "STEADY",
+            "description": "14h steady-state 80/20 GET/SET — the window the leak verdict is fitted over",
+            "connections": 64,
+            "cps_limit": -1,
+            "rps_limit": -1,
+            "completion": {
+                "type": "duration",
+                "seconds": 50400
+            },
+            "keyspace": {
+                "keys_count": 100000,
+                "key_size_bytes": 16,
+                "key_prefix": "soak:",
+                "generation_alg": "uniform_rand",
+                "seed": 12345
+            },
+            "commands": [
+                {
+                    "command": "get",
+                    "weight": 0.8
+                },
+                {
+                    "command": "set",
+                    "weight": 0.2,
+                    "data_size_bytes": 512
+                }
+            ]
+        }
+    ]
+}
