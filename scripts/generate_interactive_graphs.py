@@ -325,7 +325,7 @@ def load_all_data(results_dir):
 
         for ndjson_file in sorted(subdir.glob("*.ndjson")):
             # Skip .system.ndjson files
-            if ndjson_file.name.endswith(".system.ndjson"):
+            if ndjson_file.name.endswith((".system.ndjson", ".interval.ndjson")):
                 continue
             driver = ndjson_file.stem
             records = load_steady_records(ndjson_file)
@@ -402,7 +402,7 @@ def load_latency_data(results_dir, rps_outlier_map=None):
             continue
 
         for ndjson_file in sorted(subdir.glob("*.ndjson")):
-            if ndjson_file.name.endswith(".system.ndjson"):
+            if ndjson_file.name.endswith((".system.ndjson", ".interval.ndjson")):
                 continue
             driver = ndjson_file.stem
             records = load_steady_records(ndjson_file)
@@ -456,7 +456,7 @@ def extract_driver_versions(results_dir):
             continue
 
         for ndjson_file in sorted(subdir.glob("*.ndjson")):
-            if ndjson_file.name.endswith(".system.ndjson"):
+            if ndjson_file.name.endswith((".system.ndjson", ".interval.ndjson")):
                 continue
             driver = ndjson_file.stem
             if driver in versions:
@@ -607,7 +607,7 @@ def load_cpu_data(results_dir, rps_outlier_map=None):
 
         for ndjson_file in sorted(subdir.glob("*.ndjson")):
             # Skip .system.ndjson files
-            if ndjson_file.name.endswith(".system.ndjson"):
+            if ndjson_file.name.endswith((".system.ndjson", ".interval.ndjson")):
                 continue
 
             driver = ndjson_file.stem
@@ -960,7 +960,7 @@ def load_all_data_flat(results_dir):
     rps_outlier_map = {}
 
     for ndjson_file in sorted(results_dir.glob("*.ndjson")):
-        if ndjson_file.name.endswith(".system.ndjson"):
+        if ndjson_file.name.endswith((".system.ndjson", ".interval.ndjson")):
             continue
         if ndjson_file.name.startswith("_"):
             continue
@@ -1013,7 +1013,7 @@ def load_latency_data_flat(results_dir, rps_outlier_map=None):
     commands_found = set()
 
     for ndjson_file in sorted(results_dir.glob("*.ndjson")):
-        if ndjson_file.name.endswith(".system.ndjson"):
+        if ndjson_file.name.endswith((".system.ndjson", ".interval.ndjson")):
             continue
         if ndjson_file.name.startswith("_"):
             continue
@@ -1053,7 +1053,7 @@ def extract_driver_versions_flat(results_dir):
     versions = {}
 
     for ndjson_file in sorted(results_dir.glob("*.ndjson")):
-        if ndjson_file.name.endswith(".system.ndjson"):
+        if ndjson_file.name.endswith((".system.ndjson", ".interval.ndjson")):
             continue
         if ndjson_file.name.startswith("_"):
             continue
@@ -1105,7 +1105,7 @@ def load_cpu_data_flat(results_dir, rps_outlier_map=None):
     has_data = False
 
     for ndjson_file in sorted(results_dir.glob("*.ndjson")):
-        if ndjson_file.name.endswith(".system.ndjson"):
+        if ndjson_file.name.endswith((".system.ndjson", ".interval.ndjson")):
             continue
         if ndjson_file.name.startswith("_"):
             continue

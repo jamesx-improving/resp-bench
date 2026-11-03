@@ -67,6 +67,12 @@
           "description": "Request rate limit per second (-1 = unlimited)",
           "default": -1
         },
+        "reporting_interval_seconds": {
+          "type": "integer",
+          "description": "Emit a per-window metrics record to the <metrics>.interval.ndjson sidecar every N seconds while the phase runs (0 = disabled). See docs/INTERVAL_REPORTING.md",
+          "minimum": 0,
+          "default": 0
+        },
         "pipeline_depth": {
           "type": "integer",
           "description": "Maximum in-flight requests per connection",
