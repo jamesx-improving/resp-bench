@@ -37,6 +37,12 @@
 
 set -euo pipefail
 
+# cloud-init runs UserData with no HOME in the environment; under `set -u` the
+# first ${HOME} reference (rustup, cargo, go caches, the env snippet) aborts the
+# script. Default it to the invoking user's home (root under cloud-init).
+export HOME="${HOME:-$(getent passwd "$(id -un)" | cut -d: -f6)}"
+export HOME="${HOME:-/root}"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Bootstrap: locate the repo and set up helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -412,8 +418,15 @@ if [ "${SKIP_WARM_CACHES:-0}" != "1" ]; then
   make -C "${REPO_DIR}" python-build || log "WARNING: Python warm-up build failed (see above)"
   log "warming Go engine build (go build)"
   make -C "${REPO_DIR}" go-build || log "WARNING: Go warm-up build failed (see above)"
-  log "warming Rust build cache (cargo build --release)"
-  make -C "${REPO_DIR}" rust-build || log "WARNING: Rust warm-up build failed (see above)"
+  # Opt-in: the GLIDE Rust core compile is the slowest warm-up by far and can
+  # push provisioning past the CreationPolicy timeout on small instances. A
+  # matrix that uses Rust still builds it on first `make rust-run`.
+  if [ "${WARM_RUST:-0}" = "1" ]; then
+    log "warming Rust build cache (cargo build --release)"
+    make -C "${REPO_DIR}" rust-build || log "WARNING: Rust warm-up build failed (see above)"
+  else
+    log "skipping Rust warm-up build (set WARM_RUST=1 to enable)"
+  fi
 else
   log "SKIP_WARM_CACHES=1 — skipping engine cache warm-up"
 fi
