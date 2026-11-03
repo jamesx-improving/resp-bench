@@ -95,7 +95,8 @@ export class NdjsonWriter {
     return record;
   }
 
-  private static buildCommandRecord(m: CommandMetrics): Record<string, unknown> {
+  /** Shared with the interval sidecar so both use identical keys and encoding. */
+  static buildCommandRecord(m: CommandMetrics): Record<string, unknown> {
     return {
       requests: m.requests,
       errors: m.errors,

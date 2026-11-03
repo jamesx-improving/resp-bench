@@ -30,6 +30,7 @@ import type { DriverConfig } from '../config/driverConfig.js';
 import type { PhaseConfig } from '../config/phaseConfig.js';
 import type { WorkloadConfig } from '../config/workloadConfig.js';
 import { MetricsCollector } from '../metrics/collector.js';
+import { IntervalReporter } from '../metrics/intervalReporter.js';
 import { NdjsonWriter } from '../metrics/ndjsonWriter.js';
 import { CommandSelector } from './commandSelector.js';
 import { Counter, KeyGenerator } from './keyGenerator.js';
@@ -87,6 +88,7 @@ export class BenchmarkEngine {
   private readonly driverConfig: DriverConfig;
   private readonly workloadConfig: WorkloadConfig;
   private readonly writer: NdjsonWriter;
+  private readonly metricsPath: string;
   private readonly commitId: string | null;
   private readonly log: Logger;
 
@@ -96,6 +98,7 @@ export class BenchmarkEngine {
     this.driverConfig = options.driverConfig;
     this.workloadConfig = options.workloadConfig;
     this.writer = new NdjsonWriter(options.metricsPath);
+    this.metricsPath = options.metricsPath;
     this.commitId = options.commitId ?? null;
     this.log = options.logger ?? consoleLogger;
   }
@@ -165,9 +168,25 @@ export class BenchmarkEngine {
       // defeating the evenly-spaced, no-burst property the limiter exists for.
       const rateLimiter = phase.hasRpsLimit() ? RateLimiter.create(phase.rpsLimit) : null;
 
+      const intervals = phase.hasIntervalReporting()
+        ? new IntervalReporter({
+            metricsPath: this.metricsPath,
+            phaseId: phase.id,
+            connections: phase.connections,
+            intervalSeconds: phase.reportingIntervalSeconds,
+            collector,
+            onError: (error) => this.log.warn(`Interval report write failed: ${error.message}`),
+          })
+        : null;
+
       collector.start();
-      status = await this.runWorkload(phase, clients, commands, rateLimiter, collector);
-      collector.stop();
+      intervals?.start(collector.startTime());
+      try {
+        status = await this.runWorkload(phase, clients, commands, rateLimiter, collector);
+      } finally {
+        collector.stop();
+        intervals?.stop(collector.endTime());
+      }
     } finally {
       await this.closeClients(clients);
     }

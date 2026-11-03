@@ -75,6 +75,12 @@ export class MetricsCollector {
   totalErrors = 0;
   private startTimeMs: number | null = null;
   private endTimeMs: number | null = null;
+  /**
+   * Per-window metrics for interval reporting; null (the default) when interval
+   * reporting is disabled, so the hot path pays one null check and nothing else.
+   * The cumulative `commandMetrics` above is never reset.
+   */
+  private window: IntervalWindow | null = null;
 
   start(): void {
     this.startTimeMs = Date.now();
@@ -94,6 +100,24 @@ export class MetricsCollector {
       this.commandMetrics.set(result.commandName, metrics);
     }
     metrics.record(result);
+
+    if (this.window !== null) this.window.record(result);
+  }
+
+  /** Start recording a per-window copy of every result (see `takeWindow`). */
+  enableWindow(): void {
+    this.window ??= new IntervalWindow();
+  }
+
+  /**
+   * Return the current window and start a fresh one. Swapping (rather than
+   * resetting in place) is safe because `record` never awaits, so no worker can
+   * be mid-record when this runs.
+   */
+  takeWindow(): IntervalWindow {
+    const current = this.window ?? new IntervalWindow();
+    this.window = new IntervalWindow();
+    return current;
   }
 
   startTime(): number {
@@ -107,5 +131,23 @@ export class MetricsCollector {
   durationMillis(): number {
     if (this.startTimeMs === null || this.endTimeMs === null) return 0;
     return this.endTimeMs - this.startTimeMs;
+  }
+}
+
+/** Metrics for one reporting window: same per-command shape as the phase. */
+export class IntervalWindow {
+  readonly commandMetrics = new Map<string, CommandMetrics>();
+  totalRequests = 0;
+  totalErrors = 0;
+
+  record(result: CommandResult): void {
+    this.totalRequests += 1;
+    if (!result.success) this.totalErrors += 1;
+    let metrics = this.commandMetrics.get(result.commandName);
+    if (metrics === undefined) {
+      metrics = new CommandMetrics(result.commandName);
+      this.commandMetrics.set(result.commandName, metrics);
+    }
+    metrics.record(result);
   }
 }

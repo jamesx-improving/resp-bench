@@ -18,6 +18,8 @@ export class PhaseConfig {
   readonly rpsLimit: number;
   readonly pipelineDepth: number;
   readonly warmupRequests: number;
+  /** Interval-reporting period in seconds; 0 = disabled (docs/INTERVAL_REPORTING.md). */
+  readonly reportingIntervalSeconds: number;
 
   constructor(init: {
     id: string;
@@ -30,6 +32,7 @@ export class PhaseConfig {
     rpsLimit?: number | null;
     pipelineDepth?: number | null;
     warmupRequests?: number | null;
+    reportingIntervalSeconds?: number | null;
   }) {
     this.id = init.id;
     this.description = init.description ?? null;
@@ -42,6 +45,7 @@ export class PhaseConfig {
     this.rpsLimit = init.rpsLimit ?? -1;
     this.pipelineDepth = init.pipelineDepth ?? DEFAULT_PIPELINE_DEPTH;
     this.warmupRequests = init.warmupRequests ?? DEFAULT_WARMUP_REQUESTS;
+    this.reportingIntervalSeconds = init.reportingIntervalSeconds ?? 0;
   }
 
   hasCpsLimit(): boolean {
@@ -50,6 +54,10 @@ export class PhaseConfig {
 
   hasRpsLimit(): boolean {
     return this.rpsLimit > 0;
+  }
+
+  hasIntervalReporting(): boolean {
+    return this.reportingIntervalSeconds > 0;
   }
 
   effectivePipelineDepth(): number {

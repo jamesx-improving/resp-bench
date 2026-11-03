@@ -122,6 +122,16 @@ export class ConfigLoader {
     }
     const connections = reqInt(data, 'connections', what);
     if (connections <= 0) throw new ConfigError(`${what} "connections" must be positive`);
+    const reportingIntervalSeconds = optNumber(data, 'reporting_interval_seconds');
+    if (
+      reportingIntervalSeconds !== null &&
+      (!Number.isInteger(reportingIntervalSeconds) || reportingIntervalSeconds < 0)
+    ) {
+      throw new ConfigError(
+        `${what} "reporting_interval_seconds" must be a non-negative integer ` +
+          `(got ${reportingIntervalSeconds})`,
+      );
+    }
 
     return new PhaseConfig({
       id: reqString(data, 'id', what),
@@ -131,6 +141,7 @@ export class ConfigLoader {
       rpsLimit: optNumber(data, 'rps_limit'),
       pipelineDepth: optNumber(data, 'pipeline_depth'),
       warmupRequests: optNumber(data, 'warmup_requests'),
+      reportingIntervalSeconds,
       completion: ConfigLoader.parseCompletion(
         asRecord(data['completion'] ?? {}, `${what}.completion`),
         what,

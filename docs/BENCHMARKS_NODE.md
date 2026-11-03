@@ -101,6 +101,25 @@ explicitly:
 - **Memory is not comparable to the JVM.** The system monitor's RSS samples include
   V8 heap growth, which grows and collects on a different schedule from the JVM's.
 
+## Interval Reporting
+
+Setting `reporting_interval_seconds` on a phase writes per-window records to
+`<metrics minus .ndjson>.interval.ndjson`, as specified in
+[INTERVAL_REPORTING.md](INTERVAL_REPORTING.md). Node specifics:
+
+- The window is a second, per-command `CommandMetrics` map in `MetricsCollector`,
+  swapped out at each tick (`takeWindow`). `record` never awaits, so the swap needs
+  no lock. With reporting disabled the hot path only adds a null check.
+- The timer is a `setInterval` that is `unref()`'d and cleared at phase end, where
+  the final partial window is written. Records are written with `appendFileSync`,
+  so each one is on disk before the next is built.
+- `memory` comes from `process.memoryUsage()`: `rss_bytes`, `heap_used_bytes`,
+  `heap_total_bytes`, `external_bytes`, `array_buffers_bytes`. GLIDE's Rust core
+  memory is outside the V8 heap and shows up only in `rss_bytes`.
+- Timers run on the same event loop as the workers. A driver whose calls settle
+  purely through microtasks (the `recording` driver with no delay) starves the timer
+  until the phase ends. Real drivers do socket I/O, so their ticks fire on time.
+
 ## Cross-Engine Parity
 
 Verified against the Java reference rather than assumed:
