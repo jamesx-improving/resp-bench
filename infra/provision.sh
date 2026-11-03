@@ -93,7 +93,17 @@ pkg_install() {
   done
 
   if [ "${PKG}" = "dnf" ]; then
-    ${SUDO} dnf install -y "${dnf_pkgs[@]}"
+    # Retry: at first boot another rpm client (dnf makecache timer, SSM agent)
+    # can briefly hold /var/lib/rpm/.rpm.lock, which fails the install outright
+    # ("can't create transaction lock ... Resource temporarily unavailable").
+    local attempt
+    for attempt in 1 2 3 4 5 6; do
+      ${SUDO} dnf install -y "${dnf_pkgs[@]}" && return 0
+      log "dnf install failed (attempt ${attempt}/6) — retrying in 20s"
+      sleep 20
+    done
+    err "dnf install ${dnf_pkgs[*]} failed after 6 attempts"
+    return 1
   else
     if [ "${_apt_updated}" -eq 0 ]; then
       ${SUDO} apt-get update -y
