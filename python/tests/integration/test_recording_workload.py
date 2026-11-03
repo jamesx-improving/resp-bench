@@ -129,3 +129,38 @@ async def test_two_phases_written_as_two_lines(tmp_path):
     assert [r["phase"]["id"] for r in rows] == ["WARMUP", "STEADY"]
     assert rows[0]["totals"]["requests"] == 100
     assert rows[1]["totals"]["requests"] == 200
+
+
+async def test_interval_reporting_sidecar(tmp_path):
+    phase = _phase(
+        connections=2,
+        completion=CompletionConfig(type="duration", seconds=3),
+        reporting_interval_seconds=1,
+    )
+    rows = await _run(tmp_path, _driver(), _workload([phase]))
+    assert len(rows) == 1  # metrics file holds only the phase record
+    sidecar = tmp_path / "metrics.interval.ndjson"
+    intervals = [json.loads(line) for line in sidecar.read_text().splitlines()]
+
+    assert len(intervals) >= 3
+    assert [r["interval"]["index"] for r in intervals] == list(range(len(intervals)))
+    for rec in intervals:
+        assert rec["type"] == "interval"
+        assert rec["phase_id"] == "P"
+        assert rec["connections"] == 2
+        assert rec["interval"]["duration_s"] <= 1.5
+        set_metrics = rec["metrics"]["SET"]
+        assert set_metrics["requests"] == rec["totals"]["requests"]
+        assert set_metrics["latency"]["unit"] == "us"
+        assert set_metrics["latency"]["hdr"]["format"] == "hdr"
+        assert isinstance(rec["memory"]["gc_gen_counts_sum"], int)
+        assert rec["memory"]["asyncio_tasks"] >= 1
+    elapsed = [r["interval"]["elapsed_s"] for r in intervals]
+    assert elapsed == sorted(elapsed)
+    assert sum(r["totals"]["requests"] for r in intervals) == rows[0]["totals"]["requests"]
+    assert sum(r["totals"]["errors"] for r in intervals) == rows[0]["totals"]["errors"]
+
+
+async def test_interval_reporting_disabled_writes_no_sidecar(tmp_path):
+    await _run(tmp_path, _driver(), _workload([_phase()]))
+    assert not (tmp_path / "metrics.interval.ndjson").exists()

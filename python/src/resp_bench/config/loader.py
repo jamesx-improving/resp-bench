@@ -65,6 +65,12 @@ class ConfigLoader:
             phase.keyspace.validate()
             if phase.connections is None or phase.connections < 1:
                 raise ValueError("connections must be a positive integer")
+            # bool is an int subclass; reject it too so `true` is not read as 1.
+            interval = phase.reporting_interval_seconds
+            if isinstance(interval, bool) or not isinstance(interval, int) or interval < 0:
+                raise ValueError(
+                    "reporting_interval_seconds must be a non-negative integer"
+                )
             if not phase.commands:
                 raise ValueError("commands must contain at least one entry")
             # The shared workload schema permits commands this engine has not
@@ -97,6 +103,7 @@ class ConfigLoader:
             rps_limit=data.get("rps_limit", -1),
             pipeline_depth=data.get("pipeline_depth", 1),
             warmup_requests=data.get("warmup_requests", 1),
+            reporting_interval_seconds=data.get("reporting_interval_seconds", 0),
             completion=ConfigLoader._parse_completion(data.get("completion", {})),
             keyspace=ConfigLoader._parse_keyspace(data.get("keyspace", {})),
             commands=[ConfigLoader._parse_command(c) for c in data.get("commands", [])],

@@ -128,28 +128,41 @@ class NdjsonWriter:
         return result
 
     def _build_command_metrics(self, collector: MetricsCollector) -> dict:
-        metrics: dict = {}
-        for cmd_name, cmd_metrics in collector.command_metrics.items():
-            latency: dict = {
-                "unit": "us",
-                "count": cmd_metrics.count(),
-                "summary": {
-                    "min": int(cmd_metrics.min()),
-                    "p50": int(cmd_metrics.percentile(50)),
-                    "p95": int(cmd_metrics.percentile(95)),
-                    "p99": int(cmd_metrics.percentile(99)),
-                    "p999": int(cmd_metrics.percentile(99.9)),
-                    "max": int(cmd_metrics.max()),
-                },
-            }
-            latency["hdr"] = {
-                "format": "hdr",
-                "sigfig": 3,
-                "payload_b64": encode_base64(cmd_metrics.histogram),
-            }
-            metrics[cmd_name] = {
-                "requests": cmd_metrics.requests,
-                "errors": cmd_metrics.errors,
-                "latency": latency,
-            }
-        return metrics
+        return build_command_metrics(collector)
+
+
+def build_command_metrics(collector: MetricsCollector, skip_empty: bool = False) -> dict:
+    """The ``metrics`` block: one entry per command, keyed by command name.
+
+    Shared by the phase record and the interval record so both use identical
+    keys, naming and latency encoding. ``skip_empty`` drops commands that saw no
+    request at all (the interval record may omit them; the phase record keeps
+    every command it has seen).
+    """
+    metrics: dict = {}
+    for cmd_name, cmd_metrics in collector.command_metrics.items():
+        if skip_empty and cmd_metrics.requests == 0:
+            continue
+        latency: dict = {
+            "unit": "us",
+            "count": cmd_metrics.count(),
+            "summary": {
+                "min": int(cmd_metrics.min()),
+                "p50": int(cmd_metrics.percentile(50)),
+                "p95": int(cmd_metrics.percentile(95)),
+                "p99": int(cmd_metrics.percentile(99)),
+                "p999": int(cmd_metrics.percentile(99.9)),
+                "max": int(cmd_metrics.max()),
+            },
+        }
+        latency["hdr"] = {
+            "format": "hdr",
+            "sigfig": 3,
+            "payload_b64": encode_base64(cmd_metrics.histogram),
+        }
+        metrics[cmd_name] = {
+            "requests": cmd_metrics.requests,
+            "errors": cmd_metrics.errors,
+            "latency": latency,
+        }
+    return metrics

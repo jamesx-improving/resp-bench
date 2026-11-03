@@ -54,6 +54,7 @@ from ..config.driver_config import DriverConfig
 from ..config.phase_config import PhaseConfig
 from ..config.workload_config import WorkloadConfig
 from ..metrics.collector import MetricsCollector
+from ..metrics.interval_reporter import IntervalReporter, interval_sidecar_path
 from ..metrics.ndjson_writer import NdjsonWriter
 from .command_selector import CommandSelector
 from .key_generator import Counter, KeyGenerator
@@ -113,6 +114,7 @@ class BenchmarkEngine:
         self._driver_config = driver_config
         self._workload_config = workload_config
         self._writer = NdjsonWriter(metrics_path)
+        self._interval_path = interval_sidecar_path(metrics_path)
         self._commit_id = commit_id
         # True if any phase ended in ERROR. The CLI turns this into a non-zero
         # exit code so the matrix runner does not score the cell as a good run.
@@ -324,6 +326,26 @@ class BenchmarkEngine:
         )
         request_budget = Counter()
 
+        # Interval reporting records every result into a per-window collector as
+        # well. Chosen once here so a phase without it pays nothing per request.
+        reporter: Optional[IntervalReporter] = None
+        if phase.has_interval_reporting():
+            reporter = IntervalReporter(
+                path=self._interval_path,
+                phase_id=phase.id,
+                connections=phase.connections,
+                interval_seconds=phase.reporting_interval_seconds,
+            )
+            phase_record = collector.record
+            window_record = reporter.record
+
+            def record(result: CommandResult) -> None:
+                phase_record(result)
+                window_record(result)
+
+        else:
+            record = collector.record
+
         async def worker(
             client: AsyncBenchmarkClient,
             key_gen: KeyGenerator,
@@ -350,10 +372,10 @@ class BenchmarkEngine:
                     command = selector.select()
                     key = key_gen.next_key()
                     result = await command.execute(client, key)
-                    collector.record(result)
+                    record(result)
                     succeeded = result.success
                 except Exception:  # noqa: BLE001 - record failures, keep going
-                    collector.record(
+                    record(
                         CommandResult(
                             command_name=command.name if command else "UNKNOWN",
                             latency_micros=0,
@@ -406,6 +428,8 @@ class BenchmarkEngine:
             len(clients),
             depth,
         )
+        if reporter is not None:
+            reporter.start()
         try:
             # Cancel-and-drain on first failure: a worker that dies must not
             # leave its peers running against clients we are about to close.
@@ -416,6 +440,11 @@ class BenchmarkEngine:
         except Exception as exc:  # noqa: BLE001
             logger.error("Error during workload execution: %s", exc)
             return "ERROR"
+        finally:
+            # Stops the clock with the workload loop and writes the final partial
+            # window, so interval totals sum to the phase totals.
+            if reporter is not None:
+                await reporter.stop()
 
         # A phase in which nothing succeeded produced no usable latency data;
         # reporting COMPLETED would let the orchestrator record it as a good run.

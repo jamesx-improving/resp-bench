@@ -69,6 +69,22 @@ favour of keeping this baseline.
   engine has no equivalent yet, so results above the threshold are not directly
   comparable to other engines.
 
+## Interval reporting (soak tests)
+
+Set `reporting_interval_seconds` (integer, `0`/absent = off) on a phase to get a
+time series alongside the normal phase record. Every N seconds of the workload
+loop, one `"type": "interval"` record is appended (and flushed) to a sidecar next
+to the metrics file: `--metrics out/x.ndjson` writes `out/x.interval.ndjson`. Each
+record carries a per-window histogram in the same `metrics.<CMD>` shape as the
+phase record; a final partial window is written at phase end so interval request
+totals sum to the phase totals. The reporter is an asyncio task on the same loop,
+cancelled when the workload ends.
+
+The Python `memory` block has `rss_bytes` (current RSS from `/proc/self/statm`;
+omitted where unavailable, e.g. macOS), `gc_gen_counts_sum` (`sum(gc.get_count())`)
+and `asyncio_tasks` (`len(asyncio.all_tasks())`). Full spec:
+[`docs/INTERVAL_REPORTING.md`](../docs/INTERVAL_REPORTING.md).
+
 ## Installation
 
 Requires Python 3.10+ (tested on 3.10, 3.11 and 3.12) and a **C compiler**:
