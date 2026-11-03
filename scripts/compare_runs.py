@@ -123,12 +123,12 @@ def main():
         print(f"No common series. baseline={sorted(base)} candidate={sorted(cand)}", file=sys.stderr)
         return 1
 
-    rows, md = [], []
     rb_h, rc_h = f"baseline run (GLIDE {B})", f"RC run (GLIDE {C})"
     hdr = ("Driver", "Conns", f"RPS — {rb_h}", f"RPS — {rc_h}", "ΔRPS",
            f"p99 µs — {rb_h}", f"p99 µs — {rc_h}", "Δp99", "Errors b/c", "n b/c")
-    md.append("| " + " | ".join(hdr) + " |")
-    md.append("|" + "---|" * len(hdr))
+    split = bool(args.glide and args.glide in series)
+    # main = GLIDE rows (or everything, without --glide); drift = peer rows, shown last.
+    main_rows, main_md, drift_rows, drift_md = [], [], [], []
     stats = {}
     for s in series:
         for c in sorted(set(base[s]) & set(cand[s]), key=lambda x: (x is None, x)):
@@ -140,15 +140,21 @@ def main():
             cells = (row_label(s), c, f(st["rb"], ",.0f"), f(st["rc"], ",.0f"), f(st["drps"], "+.1f", "%"),
                      f(st["pb"], ",.0f"), f(st["pc"], ",.0f"), f(st["dp99"], "+.1f", "%"),
                      f"{st['eb']}/{st['ec']}", f"{st['nb']}/{st['nc']}")
-            md.append("| " + " | ".join(str(x) for x in cells) + " |")
-            bad_r = st["drps"] is not None and st["drps"] < WARN_RPS_PCT
-            bad_p = st["dp99"] is not None and st["dp99"] > WARN_P99_PCT
-            rows.append("<tr>" + "".join(
+            is_peer = split and s != args.glide
+            bad_r = not is_peer and st["drps"] is not None and st["drps"] < WARN_RPS_PCT
+            bad_p = not is_peer and st["dp99"] is not None and st["dp99"] > WARN_P99_PCT
+            html_row = "<tr>" + "".join(
                 f"<td class='{'bad' if (i == 4 and bad_r) or (i == 7 and bad_p) else ''}'>{x}</td>"
-                for i, x in enumerate(cells)) + "</tr>")
+                for i, x in enumerate(cells)) + "</tr>"
+            md_row = "| " + " | ".join(str(x) for x in cells) + " |"
+            (drift_rows if is_peer else main_rows).append(html_row)
+            (drift_md if is_peer else main_md).append(md_row)
+
+    md_hdr = ["| " + " | ".join(hdr) + " |", "|" + "---|" * len(hdr)]
+    th = "<tr>" + "".join(f"<th>{h}</th>" for h in hdr) + "</tr>"
 
     norm_rows, norm_md = [], []
-    if args.glide and args.glide in series:
+    if split:
         peers = [s for s in series if s != args.glide]
         norm_md += ["", f"### {args.glide} vs peers — change in GLIDE/peer ratio "
                         f"(GLIDE {B} → {C}; peers unchanged)", "",
@@ -169,14 +175,22 @@ def main():
                 norm_rows.append("<tr>" + "".join(f"<td>{x}</td>" for x in cells) + "</tr>")
 
     title = f"GLIDE {C} vs {B} — phase {args.phase}"
-    norm_html = ""
+    main_title = f"{args.glide}: {B} → {C}" if split else "All drivers"
+    norm_html = drift_html = ""
     if norm_rows:
         norm_html = (f"<h2>{args.glide} vs peers — change in GLIDE/peer ratio</h2>"
-                     "<p class='sub'>Peer versions are identical in both runs, so this cancels instance-to-instance "
-                     "noise. ΔRPS ratio &gt; 0 = GLIDE gained on the peer; Δp99 ratio &lt; 0 = GLIDE's tail improved "
+                     "<p class='sub'>The GLIDE change with instance noise cancelled: peers run the same version in "
+                     "both runs, so dividing GLIDE by its peer within each run removes whatever the box itself did. "
+                     "ΔRPS ratio &gt; 0 = GLIDE gained on the peer; Δp99 ratio &lt; 0 = GLIDE's tail improved "
                      "relative to the peer.</p><table><tr><th>Peer (version)</th><th>Conns</th><th>RPS ratio b → c</th>"
                      "<th>ΔRPS ratio</th><th>p99 ratio b → c</th><th>Δp99 ratio</th></tr>" + "".join(norm_rows) +
                      "</table>")
+    if drift_rows:
+        drift_html = ("<h2>Peer drift — instance-to-instance noise</h2>"
+                      "<p class='sub'>Third-party drivers, pinned to the same version in both runs. Any change here "
+                      "is the two instances differing, not code — read it as the error bar on the GLIDE table above "
+                      "(a GLIDE delta smaller than its peer's drift at the same connection count is noise).</p>"
+                      f"<table>{th}{''.join(drift_rows)}</table>")
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>{title}</title><style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; color: #1a1a1a; }}
 h1 {{ font-size: 20px; }} h2 {{ font-size: 15px; margin-top: 28px; }} p.sub {{ color: #666; font-size: 13px; }}
@@ -184,19 +198,23 @@ table {{ border-collapse: collapse; font-size: 13px; }} th, td {{ border: 1px so
 th {{ background: #f5f5f5; }} td.bad {{ color: #c0392b; font-weight: 600; }}
 </style></head><body><h1>{title}</h1>
 <p class="sub">Two runs on separate instances that differ <b>only in the GLIDE version</b> ({B} in the baseline run,
-{C} in the RC run). Peer drivers are pinned to the same version in both runs (shown on each row), so their deltas are
-<b>instance-to-instance noise</b>, not results — use them as error bars, and read the GLIDE/peer ratio table below for
-the GLIDE change itself. Median across iterations; p99 request-weighted across commands. Flagged: RPS &lt;
-{WARN_RPS_PCT:g}%, p99 &gt; +{WARN_P99_PCT:g}%.<br>Baseline run: {args.baseline_dir}<br>RC run: {args.candidate_dir}</p>
-<table><tr>{"".join(f"<th>{h}</th>" for h in hdr)}</tr>{"".join(rows)}</table>{norm_html}</body></html>"""
+{C} in the RC run). The raw deltas below include instance noise: the GLIDE/peer ratio table cancels it, and the peer
+drift table at the bottom shows how large it was. Median across iterations; p99 request-weighted across commands.
+Flagged: RPS &lt; {WARN_RPS_PCT:g}%, p99 &gt; +{WARN_P99_PCT:g}%.<br>Baseline run: {args.baseline_dir}<br>RC run:
+{args.candidate_dir}</p>
+<h2>{main_title}</h2>
+<table>{th}{"".join(main_rows)}</table>{norm_html}{drift_html}</body></html>"""
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html)
-    note = (f"Two runs on separate instances that differ only in the GLIDE version ({B} → {C}). Peer drivers are "
-            f"pinned identically in both runs, so their deltas are instance noise — use the GLIDE/peer ratio table "
-            f"for the GLIDE change.\n\n")
-    out.with_suffix(".md").write_text(f"## {title}\n\n" + note + "\n".join(md + norm_md) + "\n")
-    print("\n".join(md + norm_md))
+    md = [f"### {main_title}", ""] + md_hdr + main_md
+    tail = (["", "### Peer drift — instance-to-instance noise (same peer version in both runs)", ""] + md_hdr
+            + drift_md) if drift_md else []
+    note = (f"Two runs on separate instances that differ only in the GLIDE version ({B} → {C}). Raw deltas include "
+            f"instance noise; the GLIDE/peer ratio table cancels it and the peer drift table shows its size.\n\n")
+    out.with_suffix(".md").write_text(f"## {title}\n\n" + note + "\n".join(md + norm_md + tail) + "\n")
+    md = md + norm_md + tail
+    print("\n".join(md))
     print(f"\nWrote {out} and {out.with_suffix('.md')}")
     return 0
 
