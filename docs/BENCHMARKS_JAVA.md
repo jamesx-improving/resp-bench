@@ -113,3 +113,16 @@ All benchmarks use the same reference workload:
 - **512 bytes** data size for SET operations
 - **50/50 GET/SET** command mix (uniform random)
 - **No rate limiting** (max throughput)
+
+---
+
+## Interval Reporting (soak tests)
+
+Set `reporting_interval_seconds` (integer > 0) on a phase to emit one interval record every N seconds to
+a sidecar next to the metrics file (`<label>.ndjson` → `<label>.interval.ndjson`, appended and flushed
+per record). Each record carries a per-window HdrHistogram per command (same `metrics.<CMD>` shape as the
+phase record) plus a JVM `memory` block: `rss_bytes` (Linux only, from `/proc/self/statm`),
+`heap_used_bytes`, `heap_committed_bytes`, `heap_max_bytes`, `nonheap_used_bytes`, `direct_buffer_bytes`,
+`gc_count`, `gc_time_ms`, `thread_count`. Absent/`0` disables it; the phase record is unchanged either way.
+For GLIDE, native memory shows up as `rss_bytes` growth with flat heap figures. Full spec:
+[INTERVAL_REPORTING.md](INTERVAL_REPORTING.md).

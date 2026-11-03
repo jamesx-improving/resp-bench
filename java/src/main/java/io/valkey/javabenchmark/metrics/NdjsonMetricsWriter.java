@@ -130,38 +130,48 @@ public class NdjsonMetricsWriter {
             String cmdName = entry.getKey();
             CommandMetrics cmdMetrics = entry.getValue();
             
-            ObjectNode cmdNode = metrics.putObject(cmdName);
-            cmdNode.put("requests", cmdMetrics.getRequests());
-            cmdNode.put("errors", cmdMetrics.getErrors());
-            
-            // Latency sub-object
-            ObjectNode latency = cmdNode.putObject("latency");
-            latency.put("unit", "us");
-            latency.put("count", cmdMetrics.getHistogram().getTotalCount());
-            
-            // Summary percentiles
-            ObjectNode summary = latency.putObject("summary");
-            summary.put("min", cmdMetrics.getMin());
-            summary.put("p50", cmdMetrics.getP50());
-            summary.put("p95", cmdMetrics.getP95());
-            summary.put("p99", cmdMetrics.getP99());
-            summary.put("p999", cmdMetrics.getP999());
-            summary.put("max", cmdMetrics.getMax());
-            
-            // HDR histogram with native encoding
-            ObjectNode hdr = latency.putObject("hdr");
-            hdr.put("format", "hdr");
-            hdr.put("sigfig", 3);
-            hdr.put("payload_b64", encodeHistogram(cmdMetrics.getHistogram()));
+            putCommandMetrics(metrics, cmdName, cmdMetrics.getRequests(), cmdMetrics.getErrors(),
+                    cmdMetrics.getHistogram());
         }
         
         return root;
     }
 
     /**
+     * Writes one {@code metrics.<CMD>} entry (requests, errors, latency summary + HDR payload).
+     * Shared by the phase record and the interval record so both use identical keys and encoding.
+     */
+    static void putCommandMetrics(ObjectNode metrics, String cmdName, long requests, long errors,
+                                  Histogram histogram) {
+        ObjectNode cmdNode = metrics.putObject(cmdName);
+        cmdNode.put("requests", requests);
+        cmdNode.put("errors", errors);
+
+        // Latency sub-object
+        ObjectNode latency = cmdNode.putObject("latency");
+        latency.put("unit", "us");
+        latency.put("count", histogram.getTotalCount());
+
+        // Summary percentiles
+        ObjectNode summary = latency.putObject("summary");
+        summary.put("min", histogram.getMinValue());
+        summary.put("p50", histogram.getValueAtPercentile(50));
+        summary.put("p95", histogram.getValueAtPercentile(95));
+        summary.put("p99", histogram.getValueAtPercentile(99));
+        summary.put("p999", histogram.getValueAtPercentile(99.9));
+        summary.put("max", histogram.getMaxValue());
+
+        // HDR histogram with native encoding
+        ObjectNode hdr = latency.putObject("hdr");
+        hdr.put("format", "hdr");
+        hdr.put("sigfig", 3);
+        hdr.put("payload_b64", encodeHistogram(histogram));
+    }
+
+    /**
      * Encodes the histogram to a base64 string using HDR's native compressed format.
      */
-    private String encodeHistogram(Histogram histogram) {
+    static String encodeHistogram(Histogram histogram) {
         try {
             int neededCapacity = histogram.getNeededByteBufferCapacity();
             ByteBuffer buffer = ByteBuffer.allocate(neededCapacity);

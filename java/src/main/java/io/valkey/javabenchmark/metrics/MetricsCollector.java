@@ -22,6 +22,8 @@ public class MetricsCollector {
     private final AtomicLong totalErrors = new AtomicLong(0);
     private volatile long startTime;
     private volatile long endTime;
+    /** Optional per-window sink for interval reporting; null when disabled. */
+    private volatile IntervalReporter intervalReporter;
 
     public void start() {
         startTime = System.currentTimeMillis();
@@ -39,6 +41,19 @@ public class MetricsCollector {
         
         commandMetrics.computeIfAbsent(result.commandName(), CommandMetrics::new)
                 .record(result);
+
+        IntervalReporter reporter = intervalReporter;
+        if (reporter != null) {
+            reporter.record(result);
+        }
+    }
+
+    /**
+     * Attach (or detach with null) an interval reporter that receives every recorded result
+     * in addition to the cumulative phase metrics.
+     */
+    public void setIntervalReporter(IntervalReporter reporter) {
+        this.intervalReporter = reporter;
     }
 
     public long getTotalRequests() { return totalRequests.get(); }

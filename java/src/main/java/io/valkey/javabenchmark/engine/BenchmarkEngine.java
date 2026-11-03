@@ -9,11 +9,13 @@ import io.valkey.javabenchmark.command.Command;
 import io.valkey.javabenchmark.command.Command.CommandResult;
 import io.valkey.javabenchmark.command.CommandFactory;
 import io.valkey.javabenchmark.config.*;
+import io.valkey.javabenchmark.metrics.IntervalReporter;
 import io.valkey.javabenchmark.metrics.NdjsonMetricsWriter;
 import io.valkey.javabenchmark.metrics.MetricsCollector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -68,6 +70,7 @@ public class BenchmarkEngine {
     private final DriverConfig driverConfig;
     private final WorkloadConfig workloadConfig;
     private final NdjsonMetricsWriter metricsWriter;
+    private final String metricsPath;
     private final String commitId;
     
     // Client reference for version info
@@ -91,6 +94,7 @@ public class BenchmarkEngine {
         this.driverConfig = driverConfig;
         this.workloadConfig = workloadConfig;
         this.metricsWriter = new NdjsonMetricsWriter(metricsPath);
+        this.metricsPath = metricsPath;
         this.commitId = commitId;
     }
 
@@ -159,9 +163,20 @@ public class BenchmarkEngine {
         // Warmup: send PINGs on all clients (blocking, before measured workload)
         warmupClients(clients, phase.getWarmupRequests());
 
+        // Interval reporting (soak tests): sidecar is created lazily, only for phases that enable it
+        IntervalReporter intervalReporter = null;
+        if (phase.hasReportingInterval()) {
+            String sidecar = IntervalReporter.sidecarPath(metricsPath);
+            intervalReporter = new IntervalReporter(Path.of(sidecar), phase.getId(),
+                    phase.getConnections(), phase.getReportingIntervalSeconds());
+            intervalReporter.open();
+            metrics.setIntervalReporter(intervalReporter);
+            logger.info("Interval reporting every {}s to {}", phase.getReportingIntervalSeconds(), sidecar);
+        }
+
         // Execute workload with VT-per-client architecture
         String status = executeWorkload(phase, clients, commands, keyGenerator, 
-                                         rateLimiter, metrics, pipelineDepth);
+                                         rateLimiter, metrics, pipelineDepth, intervalReporter);
 
         // Write metrics
         metricsWriter.writePhaseResults(phase.getId(), status, phase.getConnections(), metrics);
@@ -242,7 +257,7 @@ public class BenchmarkEngine {
     private String executeWorkload(PhaseConfig phase, List<BenchmarkClient> clients,
                                    List<Command> commands, KeyGenerator keyGenerator,
                                    RateLimiter rateLimiter, MetricsCollector metrics,
-                                   int pipelineDepth) {
+                                   int pipelineDepth, IntervalReporter intervalReporter) {
         
         CompletionConfig completion = phase.getCompletion();
         AtomicBoolean running = new AtomicBoolean(true);
@@ -261,6 +276,9 @@ public class BenchmarkEngine {
                 : Long.MAX_VALUE;
         
         metrics.start();
+        if (intervalReporter != null) {
+            intervalReporter.start();
+        }
         long startTime = System.currentTimeMillis();
         
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -337,6 +355,11 @@ public class BenchmarkEngine {
             return "ERROR";
         } finally {
             metrics.stop();
+            if (intervalReporter != null) {
+                // Workers are done (executor closed): emit the final partial interval
+                intervalReporter.stop();
+                metrics.setIntervalReporter(null);
+            }
         }
         
         logger.info("All operations completed. Total requests: {}", requestCount.get());

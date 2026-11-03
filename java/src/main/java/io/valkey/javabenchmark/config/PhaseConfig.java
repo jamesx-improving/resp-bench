@@ -15,8 +15,11 @@
  */
 package io.valkey.javabenchmark.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.IntNode;
 
 import java.util.List;
 
@@ -57,6 +60,13 @@ public class PhaseConfig {
 
     @JsonProperty("commands")
     private List<CommandConfig> commands;
+
+    /**
+     * Raw {@code reporting_interval_seconds} value. Kept as a JsonNode so that non-integer
+     * values (e.g. 1.5, "30") are rejected by {@link #validate()} instead of being silently coerced.
+     */
+    @JsonProperty("reporting_interval_seconds")
+    private JsonNode reportingIntervalSeconds;
 
     // Getters and Setters
 
@@ -140,7 +150,33 @@ public class PhaseConfig {
         this.commands = commands;
     }
 
+    /**
+     * Interval reporting period in seconds; 0 when absent (disabled).
+     * Only meaningful after {@link #validate()} has succeeded.
+     */
+    @JsonIgnore
+    public int getReportingIntervalSeconds() {
+        if (reportingIntervalSeconds == null || reportingIntervalSeconds.isNull()) {
+            return 0;
+        }
+        return reportingIntervalSeconds.asInt(0);
+    }
+
+    @JsonIgnore
+    public void setReportingIntervalSeconds(int seconds) {
+        this.reportingIntervalSeconds = IntNode.valueOf(seconds);
+    }
+
     // Convenience methods
+
+    /**
+     * Check if interval reporting is enabled.
+     *
+     * @return true if reporting_interval_seconds > 0
+     */
+    public boolean hasReportingInterval() {
+        return getReportingIntervalSeconds() > 0;
+    }
 
     /**
      * Check if connection rate limiting is enabled.
@@ -195,6 +231,19 @@ public class PhaseConfig {
         
         for (CommandConfig cmd : commands) {
             cmd.validate();
+        }
+
+        if (reportingIntervalSeconds != null && !reportingIntervalSeconds.isNull()) {
+            if (!reportingIntervalSeconds.isIntegralNumber() || !reportingIntervalSeconds.canConvertToInt()) {
+                throw new IllegalArgumentException(
+                        "reporting_interval_seconds must be a non-negative integer, got "
+                                + reportingIntervalSeconds);
+            }
+            if (reportingIntervalSeconds.asInt() < 0) {
+                throw new IllegalArgumentException(
+                        "reporting_interval_seconds must be a non-negative integer, got "
+                                + reportingIntervalSeconds.asInt());
+            }
         }
     }
 
