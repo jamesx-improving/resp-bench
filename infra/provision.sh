@@ -325,9 +325,35 @@ git -C "${GLIDE_CHECKOUT_DIR}" fetch --depth 1 origin "${GLIDE_COMMIT}"
 git -C "${GLIDE_CHECKOUT_DIR}" checkout --detach "${GLIDE_COMMIT}"
 git -C "${GLIDE_CHECKOUT_DIR}" rev-parse --short HEAD 2>&1 | sed 's/^/[provision]   valkey-glide @ /' || true
 
+# ═════════════════════════════════════════════════════════════════════════════
+# LANGUAGE: Go — engines: valkey-glide-go, go-redis.
+#   Distro feeds lag (and differ between dnf and apt), so install the official
+#   go.dev tarball at a pinned version into /usr/local/go. go/go.mod declares
+#   go 1.22; the GLIDE Go module ships its Rust core as a prebuilt static lib
+#   linked through cgo, so gcc (installed above for the server build) is the only
+#   other requirement. Module downloads use the default GOPROXY on this host.
+# ═════════════════════════════════════════════════════════════════════════════
+
+GO_VERSION="${GO_VERSION:-1.24.5}"
+log "LANGUAGE: Go — installing Go ${GO_VERSION}"
+if ! /usr/local/go/bin/go version 2>/dev/null | grep -q "go${GO_VERSION} "; then
+  case "$(uname -m)" in
+    x86_64)        GO_ARCH=amd64 ;;
+    aarch64|arm64) GO_ARCH=arm64 ;;
+    *) err "unsupported architecture for Go: $(uname -m)"; exit 1 ;;
+  esac
+  curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" -o /tmp/go.tgz
+  ${SUDO} rm -rf /usr/local/go
+  ${SUDO} tar -C /usr/local -xzf /tmp/go.tgz
+  rm -f /tmp/go.tgz
+fi
+env_add 'export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"'
+export PATH="/usr/local/go/bin:${HOME}/go/bin:${PATH}"
+hash -r
+go version 2>&1 | sed 's/^/[provision]   /' || true
+
 # ─────────────────────────────────────────────────────────────────────────────
 # FUTURE ENGINES (leave room — see resp-bench plan §5.5):
-#   Go (#14):      install the Go toolchain + `go mod download`
 #   PHP (#15):     pkg_install php php-cli composer -- php-cli composer
 # Add each as its own "LANGUAGE:" block above, mirroring the pattern.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -384,6 +410,8 @@ if [ "${SKIP_WARM_CACHES:-0}" != "1" ]; then
   make -C "${REPO_DIR}" node-build || log "WARNING: Node.js warm-up build failed (see above)"
   log "warming Python engine install (python -m pip install -e .)"
   make -C "${REPO_DIR}" python-build || log "WARNING: Python warm-up build failed (see above)"
+  log "warming Go engine build (go build)"
+  make -C "${REPO_DIR}" go-build || log "WARNING: Go warm-up build failed (see above)"
   log "warming Rust build cache (cargo build --release)"
   make -C "${REPO_DIR}" rust-build || log "WARNING: Rust warm-up build failed (see above)"
 else
