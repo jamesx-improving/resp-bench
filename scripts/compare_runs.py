@@ -30,6 +30,17 @@ from collections import defaultdict
 from pathlib import Path
 
 SKIP_SUFFIXES = (".system.ndjson", ".interval.ndjson")
+# GLIDE series label (driver-config basename) -> binding name for report titles.
+BINDINGS = {
+    "valkey-glide": "Java",
+    "valkey-glide-node": "Node.js",
+    "valkey-glide-python": "Python",
+    "valkey-glide-go": "Go",
+    "valkey-glide-csharp": "C#",
+    "valkey-glide-ruby": "Ruby",
+    "valkey-glide-php": "PHP",
+    "valkey-glide-rust": "Rust",
+}
 WARN_RPS_PCT = -5.0   # candidate RPS this much lower than baseline → flagged
 WARN_P99_PCT = 10.0   # candidate p99 this much higher → flagged
 
@@ -93,6 +104,8 @@ def main():
                     help="GLIDE version (or name) of the baseline run, e.g. 2.5.3")
     ap.add_argument("--candidate-name", default="candidate",
                     help="GLIDE version (or name) of the candidate run, e.g. 2.6.0-rc2")
+    ap.add_argument("--binding", help="binding name for the title (default: inferred from --glide, "
+                                      "e.g. valkey-glide-node -> Node.js)")
     ap.add_argument("--phase", default="STEADY")
     ap.add_argument("--output", "-o", default="compare.html")
     args = ap.parse_args()
@@ -174,7 +187,8 @@ def main():
                 norm_md.append("| " + " | ".join(str(x) for x in cells) + " |")
                 norm_rows.append("<tr>" + "".join(f"<td>{x}</td>" for x in cells) + "</tr>")
 
-    title = f"GLIDE {C} vs {B} — phase {args.phase}"
+    binding = args.binding or BINDINGS.get(args.glide or "", "")
+    title = (f"{binding}: " if binding else "") + f"GLIDE {C} vs {B} — phase {args.phase}"
     main_title = f"{args.glide}: {B} → {C}" if split else "All drivers"
     norm_html = drift_html = ""
     if norm_rows:
