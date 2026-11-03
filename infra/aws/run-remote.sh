@@ -30,6 +30,12 @@
 
 set -uo pipefail
 
+# cloud-init runs UserData with no HOME in the environment; under `set -u` the
+# first ${HOME} reference (rustup, cargo, go caches, the env snippet) aborts the
+# script. Default it to the invoking user's home (root under cloud-init).
+export HOME="${HOME:-$(getent passwd "$(id -un)" | cut -d: -f6)}"
+export HOME="${HOME:-/root}"
+
 log() { printf '[run-remote] %s\n' "$*"; }
 
 # ─────────────────────────────────────────────────────────────────────────────
