@@ -1,0 +1,21 @@
+{
+    "description": "Performance sweep - Java: valkey-glide 2.6.0-rc2 vs lettuce, jedis (high-throughput configs, 10s command timeout everywhere). Peers are the stable yardstick: compare GLIDE/peer ratios across runs, which cancels instance-to-instance noise.",
+    "x_axis": "connections",
+    "workload_template": "configs/workloads/reference/basic-standalone-single-client-1M-reqs.json",
+    "iterations": 3,
+    "graph_reference": "valkey-glide",
+    "dimensions": {
+        "connections": [
+            1,
+            4,
+            16,
+            64,
+            128
+        ],
+        "driver_config": [
+            "configs/drivers/high-throughput/valkey-glide.json",
+            "configs/drivers/high-throughput/lettuce.json",
+            "configs/drivers/high-throughput/jedis.json"
+        ]
+    }
+}

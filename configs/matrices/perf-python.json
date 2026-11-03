@@ -1,0 +1,20 @@
+{
+    "description": "Performance sweep - Python: valkey-glide 2.6.0-rc2 vs redis-py (high-throughput configs, 10s command timeout everywhere). Peers are the stable yardstick: compare GLIDE/peer ratios across runs, which cancels instance-to-instance noise.",
+    "x_axis": "connections",
+    "workload_template": "configs/workloads/reference/basic-standalone-single-client-1M-reqs.json",
+    "iterations": 3,
+    "graph_reference": "valkey-glide-python",
+    "dimensions": {
+        "connections": [
+            1,
+            4,
+            16,
+            64,
+            128
+        ],
+        "driver_config": [
+            "configs/drivers/high-throughput/valkey-glide-python.json",
+            "configs/drivers/high-throughput/redis-py.json"
+        ]
+    }
+}

@@ -2,7 +2,7 @@
     "schema_version": "1.0",
     "benchmark_profile": {
         "name": "Soak - Standalone, overnight STEADY state",
-        "description": "Memory-leak soak: populate 100K keys, then hold 80/20 GET/SET for 13.5 hours. Duration is sized to land results in S3 well before a fixed morning deadline, not to a round number of hours -- deliberately named without the length so retiming the run does not make the filename lie. Connection count is supplied by the matrix runner, which overwrites it on every phase. Paired with scripts/plot_memory.py to check whether process RSS is flat or rising.",
+        "description": "Memory-leak soak: populate 100K keys, then hold 80/20 GET/SET for 13.5 hours. Duration is sized to land results in S3 well before a fixed morning deadline, not to a round number of hours -- deliberately named without the length so retiming the run does not make the filename lie. Connection count is supplied by the matrix runner, which overwrites it on every phase. Paired with scripts/plot_memory.py to check whether process RSS is flat or rising. STEADY writes a 30s interval record (throughput, latency, runtime memory) to <label>.interval.ndjson -- see docs/INTERVAL_REPORTING.md and scripts/plot_intervals.py.",
         "version": "1.0.0"
     },
     "phases": [
@@ -36,6 +36,7 @@
             "connections": 64,
             "cps_limit": -1,
             "rps_limit": -1,
+            "reporting_interval_seconds": 30,
             "completion": {
                 "type": "duration",
                 "seconds": 48600

@@ -3,5 +3,6 @@
     "description": "Valkey GLIDE Go - high-throughput configuration",
     "driver_id": "valkey-glide-go",
     "mode": "standalone",
-    "specific_driver_config": {}
+    "specific_driver_config": {},
+    "command_timeout_ms": 10000
 }

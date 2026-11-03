@@ -3,5 +3,6 @@
     "description": "go-redis (github.com/redis/go-redis) - high-throughput configuration",
     "driver_id": "go-redis",
     "mode": "standalone",
-    "specific_driver_config": {}
+    "specific_driver_config": {},
+    "command_timeout_ms": 10000
 }

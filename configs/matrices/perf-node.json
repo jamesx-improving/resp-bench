@@ -1,8 +1,9 @@
 {
-    "description": "Performance sweep - valkey-glide 2.5.3-rc1 across Java, Node.js and Python. One matrix covers all three because the runner resolves the engine per driver config.",
+    "description": "Performance sweep - Node.js: valkey-glide 2.6.0-rc2 vs ioredis (high-throughput configs, 10s command timeout everywhere). Peers are the stable yardstick: compare GLIDE/peer ratios across runs, which cancels instance-to-instance noise.",
     "x_axis": "connections",
     "workload_template": "configs/workloads/reference/basic-standalone-single-client-1M-reqs.json",
     "iterations": 3,
+    "graph_reference": "valkey-glide-node",
     "dimensions": {
         "connections": [
             1,
@@ -12,9 +13,8 @@
             128
         ],
         "driver_config": [
-            "configs/drivers/high-throughput/valkey-glide.json",
             "configs/drivers/high-throughput/valkey-glide-node.json",
-            "configs/drivers/high-throughput/valkey-glide-python.json"
+            "configs/drivers/high-throughput/ioredis.json"
         ]
     }
 }
