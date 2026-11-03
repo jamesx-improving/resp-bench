@@ -35,8 +35,9 @@ WARN_P99_PCT = 10.0   # candidate p99 this much higher → flagged
 
 
 def load(results_dir, phase):
-    """{series: {connections: {"rps": [..], "p99": [..], "errors": [..]}}}"""
+    """({series: {connections: {"rps": [..], "p99": [..], "errors": [..]}}}, {series: driver_version})"""
     out = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    versions = {}
     for path in sorted(Path(results_dir).rglob("*.ndjson")):
         if path.name.endswith(SKIP_SUFFIXES) or path.name.startswith("_"):
             continue
@@ -46,6 +47,9 @@ def load(results_dir, phase):
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            ver = (rec.get("metadata") or {}).get("primary_driver_version")
+            if ver:
+                versions[series] = ver.split("/")[-1]  # "go-redis/v9.7.3" -> "v9.7.3"
             ph = rec.get("phase") or {}
             if ph.get("id") != phase or ph.get("status") != "COMPLETED":
                 continue
@@ -65,7 +69,7 @@ def load(results_dir, phase):
             if den:
                 cell["p99"].append(num / den)
             cell["errors"].append((rec.get("totals") or {}).get("errors") or 0)
-    return out
+    return out, versions
 
 
 def med(xs):
@@ -85,21 +89,44 @@ def main():
     ap.add_argument("baseline_dir")
     ap.add_argument("candidate_dir")
     ap.add_argument("--glide", help="GLIDE series label (enables peer-normalized deltas)")
-    ap.add_argument("--baseline-name", default="baseline")
-    ap.add_argument("--candidate-name", default="candidate")
+    ap.add_argument("--baseline-name", default="baseline",
+                    help="GLIDE version (or name) of the baseline run, e.g. 2.5.3")
+    ap.add_argument("--candidate-name", default="candidate",
+                    help="GLIDE version (or name) of the candidate run, e.g. 2.6.0-rc2")
     ap.add_argument("--phase", default="STEADY")
     ap.add_argument("--output", "-o", default="compare.html")
     args = ap.parse_args()
 
-    base, cand = load(args.baseline_dir, args.phase), load(args.candidate_dir, args.phase)
+    (base, vb), (cand, vc) = load(args.baseline_dir, args.phase), load(args.candidate_dir, args.phase)
     series = sorted(set(base) & set(cand))
+
+    # Row label: what was actually measured. Peers are pinned identically in both
+    # runs, so they are the noise yardstick, not a result; say so on the row.
+    B, C = args.baseline_name, args.candidate_name
+
+    def row_label(s):
+        if s == args.glide:
+            return f"{s} {B} → {C}"
+        b, c = vb.get(s), vc.get(s)
+        if b and c and b == c:
+            return f"{s} {b} (unchanged)"
+        if b or c:
+            return f"{s} {b or '?'} → {c or '?'} (CHANGED — not a control)"
+        return s
+
+    if args.glide and vb.get(args.glide) and vb.get(args.glide) == vc.get(args.glide):
+        print(f"WARNING: both runs' metadata report {args.glide} {vb[args.glide]}; using "
+              f"--baseline-name/--candidate-name ({B} / {C}) as the GLIDE versions. Check the build "
+              f"logs if unsure (the Go engine hardcoded its version string before 847827f).",
+              file=sys.stderr)
     if not series:
         print(f"No common series. baseline={sorted(base)} candidate={sorted(cand)}", file=sys.stderr)
         return 1
 
     rows, md = [], []
-    hdr = ("Series", "Conns", f"RPS {args.baseline_name}", f"RPS {args.candidate_name}", "ΔRPS",
-           f"p99 {args.baseline_name} (µs)", f"p99 {args.candidate_name} (µs)", "Δp99", "Errors b/c", "n b/c")
+    rb_h, rc_h = f"baseline run (GLIDE {B})", f"RC run (GLIDE {C})"
+    hdr = ("Driver", "Conns", f"RPS — {rb_h}", f"RPS — {rc_h}", "ΔRPS",
+           f"p99 µs — {rb_h}", f"p99 µs — {rc_h}", "Δp99", "Errors b/c", "n b/c")
     md.append("| " + " | ".join(hdr) + " |")
     md.append("|" + "---|" * len(hdr))
     stats = {}
@@ -110,7 +137,7 @@ def main():
                       eb=sum(b["errors"]), ec=sum(k["errors"]), nb=len(b["rps"]), nc=len(k["rps"]))
             st["drps"], st["dp99"] = pct(st["rb"], st["rc"]), pct(st["pb"], st["pc"])
             stats[(s, c)] = st
-            cells = (s, c, f(st["rb"], ",.0f"), f(st["rc"], ",.0f"), f(st["drps"], "+.1f", "%"),
+            cells = (row_label(s), c, f(st["rb"], ",.0f"), f(st["rc"], ",.0f"), f(st["drps"], "+.1f", "%"),
                      f(st["pb"], ",.0f"), f(st["pc"], ",.0f"), f(st["dp99"], "+.1f", "%"),
                      f"{st['eb']}/{st['ec']}", f"{st['nb']}/{st['nc']}")
             md.append("| " + " | ".join(str(x) for x in cells) + " |")
@@ -124,8 +151,8 @@ def main():
     if args.glide and args.glide in series:
         peers = [s for s in series if s != args.glide]
         norm_md += ["", f"### {args.glide} vs peers — change in GLIDE/peer ratio "
-                        f"({args.candidate_name} vs {args.baseline_name})", "",
-                    "| Peer | Conns | RPS ratio b → c | ΔRPS ratio | p99 ratio b → c | Δp99 ratio |",
+                        f"(GLIDE {B} → {C}; peers unchanged)", "",
+                    "| Peer (version) | Conns | RPS ratio b → c | ΔRPS ratio | p99 ratio b → c | Δp99 ratio |",
                     "|---|---|---|---|---|---|"]
         for p in peers:
             for (s, c), g in sorted(((k, v) for k, v in stats.items() if k[0] == args.glide),
@@ -136,18 +163,18 @@ def main():
                 rr = lambda a, b: a / b if a and b else None  # noqa: E731
                 rb, rc = rr(g["rb"], q["rb"]), rr(g["rc"], q["rc"])
                 pb, pc = rr(g["pb"], q["pb"]), rr(g["pc"], q["pc"])
-                cells = (p, c, f"{f(rb, '.3f')} → {f(rc, '.3f')}", f(pct(rb, rc), "+.1f", "%"),
+                cells = (row_label(p), c, f"{f(rb, '.3f')} → {f(rc, '.3f')}", f(pct(rb, rc), "+.1f", "%"),
                          f"{f(pb, '.3f')} → {f(pc, '.3f')}", f(pct(pb, pc), "+.1f", "%"))
                 norm_md.append("| " + " | ".join(str(x) for x in cells) + " |")
                 norm_rows.append("<tr>" + "".join(f"<td>{x}</td>" for x in cells) + "</tr>")
 
-    title = f"{args.candidate_name} vs {args.baseline_name} — phase {args.phase}"
+    title = f"GLIDE {C} vs {B} — phase {args.phase}"
     norm_html = ""
     if norm_rows:
         norm_html = (f"<h2>{args.glide} vs peers — change in GLIDE/peer ratio</h2>"
                      "<p class='sub'>Peer versions are identical in both runs, so this cancels instance-to-instance "
                      "noise. ΔRPS ratio &gt; 0 = GLIDE gained on the peer; Δp99 ratio &lt; 0 = GLIDE's tail improved "
-                     "relative to the peer.</p><table><tr><th>Peer</th><th>Conns</th><th>RPS ratio b → c</th>"
+                     "relative to the peer.</p><table><tr><th>Peer (version)</th><th>Conns</th><th>RPS ratio b → c</th>"
                      "<th>ΔRPS ratio</th><th>p99 ratio b → c</th><th>Δp99 ratio</th></tr>" + "".join(norm_rows) +
                      "</table>")
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>{title}</title><style>
@@ -156,13 +183,19 @@ h1 {{ font-size: 20px; }} h2 {{ font-size: 15px; margin-top: 28px; }} p.sub {{ c
 table {{ border-collapse: collapse; font-size: 13px; }} th, td {{ border: 1px solid #ddd; padding: 5px 9px; }}
 th {{ background: #f5f5f5; }} td.bad {{ color: #c0392b; font-weight: 600; }}
 </style></head><body><h1>{title}</h1>
-<p class="sub">Median across iterations. p99 is request-weighted across commands. Flagged: RPS &lt; {WARN_RPS_PCT:g}%,
-p99 &gt; +{WARN_P99_PCT:g}%. Baseline: {args.baseline_dir} — candidate: {args.candidate_dir}</p>
+<p class="sub">Two runs on separate instances that differ <b>only in the GLIDE version</b> ({B} in the baseline run,
+{C} in the RC run). Peer drivers are pinned to the same version in both runs (shown on each row), so their deltas are
+<b>instance-to-instance noise</b>, not results — use them as error bars, and read the GLIDE/peer ratio table below for
+the GLIDE change itself. Median across iterations; p99 request-weighted across commands. Flagged: RPS &lt;
+{WARN_RPS_PCT:g}%, p99 &gt; +{WARN_P99_PCT:g}%.<br>Baseline run: {args.baseline_dir}<br>RC run: {args.candidate_dir}</p>
 <table><tr>{"".join(f"<th>{h}</th>" for h in hdr)}</tr>{"".join(rows)}</table>{norm_html}</body></html>"""
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html)
-    out.with_suffix(".md").write_text(f"## {title}\n\n" + "\n".join(md + norm_md) + "\n")
+    note = (f"Two runs on separate instances that differ only in the GLIDE version ({B} → {C}). Peer drivers are "
+            f"pinned identically in both runs, so their deltas are instance noise — use the GLIDE/peer ratio table "
+            f"for the GLIDE change.\n\n")
+    out.with_suffix(".md").write_text(f"## {title}\n\n" + note + "\n".join(md + norm_md) + "\n")
     print("\n".join(md + norm_md))
     print(f"\nWrote {out} and {out.with_suffix('.md')}")
     return 0
