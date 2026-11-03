@@ -237,7 +237,12 @@ log "sweep finished with exit code ${SWEEP_RC}"
 
 # (5) Generate the interactive HTML report (best effort).
 log "generating report"
-if make benchmark-matrix-graphs OUTPUT_DIR="${RESULTS_DIR}" GRAPHS_DIR="${GRAPHS_DIR}"; then
+# Optional delta-chart baseline from the matrix's "graph_reference" key. Without
+# it the generator falls back to spring-data-valkey-glide, which only Java
+# sweeps contain, and the delta charts render blank (#26).
+GRAPH_REFERENCE="$(python -c 'import json,sys; print(json.load(open(sys.argv[1])).get("graph_reference",""))' "${MATRIX_PATH}" 2>/dev/null || true)"
+[ -n "${GRAPH_REFERENCE}" ] && log "delta-chart reference: ${GRAPH_REFERENCE}"
+if make benchmark-matrix-graphs OUTPUT_DIR="${RESULTS_DIR}" GRAPHS_DIR="${GRAPHS_DIR}" GRAPH_REFERENCE="${GRAPH_REFERENCE}"; then
   if [ -f "${GRAPHS_DIR}/scalability_and_delta.html" ]; then
     cp "${GRAPHS_DIR}/scalability_and_delta.html" "${REPORT_FILE}"
   fi
@@ -257,6 +262,21 @@ if python scripts/plot_memory.py "${RESULTS_DIR}" \
   log "memory chart written to ${GRAPHS_DIR}/memory.html"
 else
   log "WARNING: memory chart generation failed"
+fi
+
+# (5c) Interval time series — throughput, p99, RSS vs managed heap vs native,
+#      errors — from the <label>.interval.ndjson sidecars the engines write when a
+#      phase sets reporting_interval_seconds (docs/INTERVAL_REPORTING.md). Skipped
+#      quietly for sweeps that never enable it. Best effort, like (5b).
+if find "${RESULTS_DIR}" -name '*.interval.ndjson' -print -quit | grep -q .; then
+  log "generating interval time-series chart"
+  if python scripts/plot_intervals.py "${RESULTS_DIR}" \
+       --output "${GRAPHS_DIR}/intervals.html" \
+       --title "Soak time series — ${MATRIX_NAME} (${JOB_ID})"; then
+    log "interval chart written to ${GRAPHS_DIR}/intervals.html"
+  else
+    log "WARNING: interval chart generation failed"
+  fi
 fi
 
 # (6) Metadata with the honest final status.

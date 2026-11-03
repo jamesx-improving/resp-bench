@@ -615,12 +615,15 @@ benchmark-matrix-dry-run:
 		--output-dir /tmp/resp-bench-dry-run \
 		--dry-run
 
+# GRAPH_REFERENCE=<series label> sets the delta-chart baseline (default in the
+# script: spring-data-valkey-glide, which is absent from non-Java sweeps; see #26).
 benchmark-matrix-graphs:
 	@test -n "$(OUTPUT_DIR)" || { echo "ERROR: OUTPUT_DIR is required, e.g. make benchmark-matrix-graphs OUTPUT_DIR=results/my-run" >&2; exit 1; }
 	@test -d "$(MATRIX_RESULTS_DIR)" || { echo "ERROR: $(MATRIX_RESULTS_DIR) is not a directory — no run has completed in $(OUTPUT_DIR), or 'latest' is stale. Run 'make benchmark-matrix OUTPUT_DIR=$(OUTPUT_DIR)' or pass RUN_ID=<run-id>." >&2; exit 1; }
 	python scripts/generate_interactive_graphs.py \
 		$(MATRIX_RESULTS_DIR) \
-		--output $(GRAPHS_DIR)
+		--output $(GRAPHS_DIR) \
+		$(if $(GRAPH_REFERENCE),--reference $(GRAPH_REFERENCE))
 
 # ============================================================================
 # Script Tests (Python)
