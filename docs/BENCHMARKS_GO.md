@@ -38,6 +38,24 @@ metrics output records both so the two are directly comparable.
   active workers (a limit below the connection count activates only `rps_limit`
   workers rather than flooring each to 1, which would overshoot).
 
+## Interval reporting (soak tests)
+
+Set `reporting_interval_seconds` on a phase to emit one record every N seconds to
+`<metrics minus .ndjson>.interval.ndjson`, plus a final partial interval so the
+interval request totals sum to the phase total. Format and semantics:
+[INTERVAL_REPORTING.md](INTERVAL_REPORTING.md). Go specifics:
+
+- Each worker records into a mutex-guarded per-window collector alongside its
+  cumulative one; the reporter swaps the window collectors every N seconds. The
+  lock is per worker, so it is uncontended except at the swap. Disabled → no
+  extra work on the hot path and no sidecar file.
+- `memory`: `runtime.ReadMemStats` (`heap_alloc_bytes`, `heap_inuse_bytes`,
+  `heap_sys_bytes`, `sys_bytes`, `num_gc`, `gc_pause_total_ns`),
+  `runtime.NumGoroutine()` (`goroutines`), and `rss_bytes` from
+  `/proc/self/statm` (Linux only; omitted elsewhere). ReadMemStats briefly
+  stops the world, once per interval. GLIDE's Rust core memory shows up only
+  in `rss_bytes`.
+
 ## Prerequisites for live runs
 
 - Go 1.22+ toolchain (`go` on `PATH`).

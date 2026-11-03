@@ -63,7 +63,14 @@ type PhaseConfig struct {
 	Completion     CompletionConfig `json:"completion"`
 	Keyspace       KeyspaceConfig   `json:"keyspace"`
 	Commands       []CommandConfig  `json:"commands"`
+	// ReportingIntervalSeconds enables interval (soak-test time series) records
+	// every N seconds; 0/absent disables. Negative is a validation error and a
+	// non-integer fails JSON parsing. See docs/INTERVAL_REPORTING.md.
+	ReportingIntervalSeconds int `json:"reporting_interval_seconds"`
 }
+
+// IntervalReportingEnabled reports whether interval records should be emitted.
+func (p PhaseConfig) IntervalReportingEnabled() bool { return p.ReportingIntervalSeconds > 0 }
 
 // HasRpsLimit reports whether a positive rps limit is configured.
 func (p PhaseConfig) HasRpsLimit() bool { return p.RpsLimit > 0 }

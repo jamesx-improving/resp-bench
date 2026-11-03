@@ -36,8 +36,11 @@ type Benchmark struct {
 	driver   config.DriverConfig
 	workload config.WorkloadConfig
 	writer   *metrics.NdjsonWriter
-	commitID string
-	logger   *log.Logger
+	// intervalWriter targets the interval sidecar; the file is only opened when
+	// a phase with reporting_interval_seconds > 0 starts.
+	intervalWriter *metrics.IntervalWriter
+	commitID       string
+	logger         *log.Logger
 
 	// interrupted is set (via SetInterrupted) when a signal handler wants the
 	// current phase to stop early and be reported as INTERRUPTED.
@@ -48,13 +51,14 @@ type Benchmark struct {
 func New(host string, port int, driver config.DriverConfig, workload config.WorkloadConfig,
 	metricsPath, commitID string, logger *log.Logger) *Benchmark {
 	return &Benchmark{
-		host:     host,
-		port:     port,
-		driver:   driver,
-		workload: workload,
-		writer:   metrics.NewNdjsonWriter(metricsPath),
-		commitID: commitID,
-		logger:   logger,
+		host:           host,
+		port:           port,
+		driver:         driver,
+		workload:       workload,
+		writer:         metrics.NewNdjsonWriter(metricsPath),
+		intervalWriter: metrics.NewIntervalWriter(metrics.IntervalPath(metricsPath)),
+		commitID:       commitID,
+		logger:         logger,
 	}
 }
 
@@ -101,6 +105,9 @@ func (b *Benchmark) validateKnobs() error {
 	for _, p := range b.workload.Phases {
 		if p.PipelineDepth < 0 {
 			return fmt.Errorf("phase %s: pipeline_depth must be >= 1", p.ID)
+		}
+		if p.ReportingIntervalSeconds < 0 {
+			return fmt.Errorf("phase %s: reporting_interval_seconds must be >= 0", p.ID)
 		}
 		if len(p.Commands) == 0 {
 			return fmt.Errorf("phase %s: commands must not be empty", p.ID)
@@ -232,6 +239,15 @@ func (b *Benchmark) runWorkload(phase config.PhaseConfig, clients []client.Bench
 	var wg sync.WaitGroup
 	var workerPanics atomic.Int64
 
+	// Interval reporting: each worker additionally records into its own
+	// mutex-guarded window collector, which the reporter swaps out every N
+	// seconds. The lock is per worker, so it is uncontended except for the
+	// instant of the swap. Disabled → windows is nil and the hot path is unchanged.
+	var reporter *intervalReporter
+	if phase.IntervalReportingEnabled() {
+		reporter = b.newIntervalReporter(phase, activeConns, activeConns*depth)
+	}
+
 	for connIdx := 0; connIdx < activeConns; connIdx++ {
 		// One key generator + selector per CONNECTION, shared by that
 		// connection's pipeline_depth workers, so the key stream stays a property
@@ -246,6 +262,10 @@ func (b *Benchmark) runWorkload(phase config.PhaseConfig, clients []client.Bench
 		c := clients[connIdx]
 
 		for slot := 0; slot < depth; slot++ {
+			var win *windowSlot
+			if reporter != nil {
+				win = reporter.slots[connIdx*depth+slot]
+			}
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -269,11 +289,17 @@ func (b *Benchmark) runWorkload(phase config.PhaseConfig, clients []client.Bench
 					}
 				}()
 				b.pipelineWorker(c, keyGen, selector, limiter, &remaining, deadline,
-					phase.Completion.IsDurationBased(), coll)
+					phase.Completion.IsDurationBased(), coll, win)
 			}()
 		}
 	}
+	if reporter != nil {
+		reporter.start()
+	}
 	wg.Wait()
+	if reporter != nil {
+		reporter.finish()
+	}
 
 	if b.interrupted.Load() {
 		return StatusInterrupted
@@ -297,7 +323,7 @@ func (b *Benchmark) runWorkload(phase config.PhaseConfig, clients []client.Bench
 // sustained failure); they do not by themselves fail the phase.
 func (b *Benchmark) pipelineWorker(c client.BenchmarkClient, keyGen *KeyGenerator,
 	selector *CommandSelector, limiter *RateLimiter, remaining *atomic.Int64,
-	deadline time.Time, durationBased bool, coll *metrics.Collector) {
+	deadline time.Time, durationBased bool, coll *metrics.Collector, win *windowSlot) {
 
 	consecutiveFailures := 0
 	for {
@@ -316,6 +342,9 @@ func (b *Benchmark) pipelineWorker(c client.BenchmarkClient, keyGen *KeyGenerato
 		cmd := selector.Select()
 		res := cmd.Execute(c, keyGen)
 		coll.Record(res)
+		if win != nil {
+			win.record(res)
+		}
 
 		if res.Success {
 			consecutiveFailures = 0

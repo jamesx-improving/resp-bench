@@ -145,7 +145,6 @@ func (w *NdjsonWriter) buildRecord(phaseID, status string, connections, pipeline
 			"requests": c.TotalRequests(),
 			"errors":   c.TotalErrors(),
 		},
-		Metrics: map[string]commandBlock{}, // marshals as {} when empty
 	}
 
 	if w.hasMetadata {
@@ -176,6 +175,16 @@ func (w *NdjsonWriter) buildRecord(phaseID, status string, connections, pipeline
 		rec.Metadata = md
 	}
 
+	rec.Metrics = commandBlocks(c)
+	return rec
+}
+
+// commandBlocks renders a collector's per-command metrics in the phase-record
+// shape (same keys, naming, units and HDR encoding). Shared by the phase record
+// and the interval record so the two can never drift apart. Always non-nil so it
+// marshals as {} when empty.
+func commandBlocks(c *Collector) map[string]commandBlock {
+	out := map[string]commandBlock{}
 	for name, cm := range c.Commands() {
 		block := commandBlock{
 			Requests: cm.Requests,
@@ -196,9 +205,9 @@ func (w *NdjsonWriter) buildRecord(phaseID, status string, connections, pipeline
 		if b64, err := EncodeCompressedBase64(cm.Histogram); err == nil {
 			block.Latency.HDR = &hdrBlock{Format: "hdr", Sigfig: 3, PayloadB64: b64}
 		}
-		rec.Metrics[name] = block
+		out[name] = block
 	}
-	return rec
+	return out
 }
 
 // iso8601 formats a UTC timestamp, or nil if the time is zero.
