@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/redis/go-redis/v9 v9.7.3
-	github.com/valkey-io/valkey-glide/go/v2 v2.6.0-rc2
+	github.com/valkey-io/valkey-glide/go/v2 v2.5.3
 )
 
 require (
