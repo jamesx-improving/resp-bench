@@ -160,7 +160,9 @@ func (c *GoRedisClient) Close() error {
 }
 
 // DriverVersion returns the go-redis module version.
-func (c *GoRedisClient) DriverVersion() string { return "go-redis/v9.7.3" }
+func (c *GoRedisClient) DriverVersion() string {
+	return moduleVersion("github.com/redis/go-redis/v9", "go-redis")
+}
 
 // SecondaryDriverVersion is unused for go-redis.
 func (c *GoRedisClient) SecondaryDriverVersion() string { return "" }

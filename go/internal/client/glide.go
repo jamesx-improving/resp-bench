@@ -134,7 +134,9 @@ func (c *GlideClient) Close() error {
 }
 
 // DriverVersion returns the GLIDE Go module version.
-func (c *GlideClient) DriverVersion() string { return "valkey-glide-go/v2.5.3" }
+func (c *GlideClient) DriverVersion() string {
+	return moduleVersion("github.com/valkey-io/valkey-glide/go/v2", "valkey-glide-go")
+}
 
 // SecondaryDriverVersion is unused for GLIDE.
 func (c *GlideClient) SecondaryDriverVersion() string { return "" }
