@@ -1,7 +1,7 @@
 {
-    "description": "13.5h overnight memory-leak soak - Go valkey-glide 2.6.0-rc3, one cell. RSS trend: scripts/plot_memory.py; throughput/p99/heap-vs-native time series: scripts/plot_intervals.py (30s interval records).",
+    "description": "5h same-day memory-leak soak - Go valkey-glide 2.6.0-rc3, one cell. RSS trend: scripts/plot_memory.py; throughput/p99/heap-vs-native time series: scripts/plot_intervals.py (30s interval records).",
     "x_axis": "connections",
-    "workload_template": "configs/workloads/reference/soak-standalone-overnight.json",
+    "workload_template": "configs/workloads/reference/soak-standalone-5h.json",
     "iterations": 1,
     "cpu_interval": 5,
     "dimensions": {

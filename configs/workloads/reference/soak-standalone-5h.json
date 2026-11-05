@@ -1,0 +1,64 @@
+{
+    "schema_version": "1.0",
+    "benchmark_profile": {
+        "name": "Soak - Standalone, 5h STEADY state",
+        "description": "Memory-leak soak sized to a same-day deadline: populate 100K keys, then hold 80/20 GET/SET for 5 hours. Identical to soak-standalone-overnight.json except the STEADY duration, so its results compare directly with the first 5h of an overnight run. STEADY writes a 30s interval record to <label>.interval.ndjson (docs/INTERVAL_REPORTING.md).",
+        "version": "1.0.0"
+    },
+    "phases": [
+        {
+            "id": "WARMUP",
+            "description": "Populate the keyspace with sequential SETs so STEADY GETs hit",
+            "connections": 64,
+            "cps_limit": -1,
+            "rps_limit": -1,
+            "completion": {
+                "type": "requests",
+                "requests": 100000
+            },
+            "keyspace": {
+                "keys_count": 100000,
+                "key_size_bytes": 16,
+                "key_prefix": "soak:",
+                "generation_alg": "sequential_int"
+            },
+            "commands": [
+                {
+                    "command": "set",
+                    "weight": 1.0,
+                    "data_size_bytes": 512
+                }
+            ]
+        },
+        {
+            "id": "STEADY",
+            "description": "5h steady-state 80/20 GET/SET - the window the leak verdict is fitted over",
+            "connections": 64,
+            "cps_limit": -1,
+            "rps_limit": -1,
+            "reporting_interval_seconds": 30,
+            "completion": {
+                "type": "duration",
+                "seconds": 18000
+            },
+            "keyspace": {
+                "keys_count": 100000,
+                "key_size_bytes": 16,
+                "key_prefix": "soak:",
+                "generation_alg": "uniform_rand",
+                "seed": 12345
+            },
+            "commands": [
+                {
+                    "command": "get",
+                    "weight": 0.8
+                },
+                {
+                    "command": "set",
+                    "weight": 0.2,
+                    "data_size_bytes": 512
+                }
+            ]
+        }
+    ]
+}
